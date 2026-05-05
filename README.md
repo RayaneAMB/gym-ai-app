@@ -1,73 +1,64 @@
-# React + TypeScript + Vite
+# ⚡ GymAI | Forge Your Legacy
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**GymAI** est une application de fitness de nouvelle génération propulsée par l'intelligence artificielle. Conçue pour les athlètes exigeants, elle génère des protocoles d'entraînement personnalisés basés sur des données réelles, tout en offrant une expérience utilisateur immersive et dynamique.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🚀 Fonctionnalités Clés
 
-## React Compiler
+-   **🧠 Génération de Plan par IA** : Algorithme personnalisé qui crée des séances basées sur vos objectifs (Bulk, Cut, Force), votre expérience et votre équipement.
+-   **🎨 Design "Volt Performance"** : Une interface sombre (Obsidian) avec des accents néon (Cyber Volt) pour une esthétique agressive et motivante.
+-   **📊 Dashboard Athlète** : Suivi en temps réel de votre split actuel, de votre fréquence d'entraînement et de votre progression.
+-   **🔐 Sécurité Avancée** : Intégration complète avec **Neon Auth** pour une gestion fluide et sécurisée des sessions et du profil.
+-   **✨ Expérience Fluide** : Animations haute performance avec **Framer Motion** et icônes vectorielles avec **Lucide React**.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🛠️ Stack Technique
 
-## Expanding the ESLint configuration
+-   **Frontend** : [React.js](https://reactjs.org/) + [Vite](https://vitejs.dev/)
+-   **Styling** : [Tailwind CSS](https://tailwindcss.com/)
+-   **Animations** : [Framer Motion](https://www.framer.com/motion/)
+-   **Base de données & Auth** : [Neon Database](https://neon.tech/)
+-   **Icons** : [Lucide React](https://lucide.dev/)
+-   **Routing** : [React Router v6](https://reactrouter.com/)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 📦 Installation et Lancement
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+1.  **Cloner le dépôt** :
+    ```bash
+    git clone [https://github.com/RayaneAMB/gym-ai-app.git](https://github.com/RayaneAMB/gym-ai-app.git)
+    cd gym-ai-app
+    ```
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+2.  **Installer les dépendances** :
+    ```bash
+    npm install
+    ```
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+3.  **Configurer les variables d'environnement** :
+    Créez un fichier `.env` à la racine et ajoutez vos clés Neon :
+    ```env
+    VITE_NEON_PROJECT_ID=votre_id_projet
+    ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+4.  **Lancer l'application en mode dev** :
+    ```bash
+    npm run dev
+    ```
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 🎨 Design System
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+L'application suit une charte graphique stricte axée sur la performance :
+-   **Background** : `#09090B` (Noir Ardoise profond)
+-   **Card Surface** : `#18181B` (Gris Carbone)
+-   **Primary Accent** : `#CCFF00` (Vert Cyber Volt)
+-   **Typography** : Oswald (Titres) et Inter (Corps de texte)
+
+## 📁 Structure du Projet
+
+```text
+src/
+ ┣ componentes/       # Composants UI (Button, Card, Select, etc.)
+ ┣ context/           # AuthContext et logique de l'application
+ ┣ pages/             # Home, Profile, Account, Onboarding
+ ┣ lib/               # Configuration des clients (Neon, Prisma)
+ ┗ App.tsx            # Gestion des routes et layout

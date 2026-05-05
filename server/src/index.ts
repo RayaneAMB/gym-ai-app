@@ -9,7 +9,7 @@ dotenv.config();
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
-// 👈 VERIFICATION CHECKS: This will print true/false in your terminal
+//checks
 console.log("=== ENV CHECK ===");
 console.log("Database URL loaded:", !!process.env.DATABASE_URL);
 console.log("OpenAI Key loaded:", !!process.env.OPENAI_API_KEY);
@@ -27,6 +27,6 @@ const api = express.Router();
 api.use("/api/plan", planRouter);
 api.use("/api/profile", profileRouter);
 app.use(api);
-app.listen(3001, "127.0.0.1", () => {
-    console.log("Server is firmly locked on http://127.0.0.1:3001");
+app.listen(Number(PORT), "0.0.0.0", () => {
+    console.log(`Server is running on port ${PORT}`);
 });

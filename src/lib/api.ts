@@ -1,6 +1,6 @@
 //import type { TrainingPlan, UserProfile } from "../types";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:3001";
+const BASE_URL = "https://gym-ai-app-9hzs.onrender.com" 
 
 // Interface pour la réponse de la DB (doit correspondre à ton Schema Prisma)
 interface PlanResponse {

@@ -28,5 +28,5 @@ api.use("/api/plan", planRouter);
 api.use("/api/profile", profileRouter);
 app.use(api);
 app.listen(Number(PORT), "0.0.0.0", () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Serveur déverrouillé ! Écoute sur le port ${PORT}`);
 });

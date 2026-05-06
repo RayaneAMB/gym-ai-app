@@ -23,7 +23,7 @@ export async function generateTrainingPlan(
         throw new Error("OpenAI API key is not set in environment variables");
     }
 
-    // ✅ baseURL must be the OpenRouter endpoint, NOT the model name
+    // Connexion à OpenRouter
     const openai = new OpenAI({
         baseURL: "https://openrouter.ai/api/v1",
         apiKey: apiKey,
@@ -37,12 +37,11 @@ export async function generateTrainingPlan(
 
     try {
         const completion = await openai.chat.completions.create({
-            // ✅ Confirmed working model
-            model: "meta-llama/llama-3.3-70b-instruct:free",
+            model: "openai/gpt-oss-120b:free",
             messages: [
                 {
                     role: "system",
-                    content: "Tu es un coach sportif expert et un concepteur de programmes d'entraînement. Tu dois répondre uniquement avec un JSON valide, sans inclure de markdown, de raisonnement ou de texte supplémentaire"
+                    content: "Tu es un coach sportif expert et un concepteur de programmes d'entraînement. Tu dois répondre UNIQUEMENT avec un objet JSON valide. Ne dis pas 'bonjour', ne dis pas 'voici le plan', ne mets pas de balises markdown, renvoie JUSTE le JSON commençant par { et finissant par }."
                 },
                 {
                     role: "user",
@@ -54,13 +53,23 @@ export async function generateTrainingPlan(
 
         const content = completion.choices[0].message.content;
         if (!content) {
-            console.error("AI no content in response:", JSON.stringify(completion, null, 2));
             throw new Error("AI malfunction: no content returned");
         }
 
-        // Strip markdown code blocks if model adds them despite instructions
-        const cleaned = content.replace(/```json/g, "").replace(/```/g, "").trim();
+        console.log("RÉPONSE BRUTE DE L'IA :", content);
+
+        // ✅ LE CORRECTIF EST ICI : On extrait de force uniquement le JSON
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        
+        if (!jsonMatch) {
+            console.error("Format invalide, pas de JSON trouvé:", content);
+            throw new Error("Le format renvoyé par l'IA n'est pas du JSON valide");
+        }
+
+        // On prend le résultat extrait et on le parse
+        const cleaned = jsonMatch[0];
         const planData = JSON.parse(cleaned);
+        
         return formatPlanResponse(planData, normalizedProfile);
 
     } catch (error) {
@@ -82,7 +91,6 @@ export async function generateTrainingPlan(
             weeklySchedule: (aiResponse.weeklySchedule || []).map((day: any) => ({
                 day: day.day || "Day",
                 focus: day.focus || "Full Body",
-                // ✅ Handle both "exercises" (from prompt) and "exercices" (typo fallback)
                 exercices: (day.exercises || day.exercices || []).map((ex: any) => ({
                     name: ex.name || "Exercice",
                     sets: ex.sets || 3,

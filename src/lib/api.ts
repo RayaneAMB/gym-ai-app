@@ -1,6 +1,7 @@
 //import type { TrainingPlan, UserProfile } from "../types";
 
 const BASE_URL = "https://gym-ai-app-9hzs.onrender.com" 
+//const BASE_URL = "http://localhost:3001"
 
 // Interface pour la réponse de la DB (doit correspondre à ton Schema Prisma)
 interface PlanResponse {

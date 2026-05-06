@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Loader2, Check } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import type { UserProfile } from "../types";
 import { useAuth } from "../context/AuthContext";
 

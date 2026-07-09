@@ -37,7 +37,7 @@ export async function generateTrainingPlan(
 
     try {
         const completion = await openai.chat.completions.create({
-            model: "google/gemma-2-9b-it:free",
+            model: "openrouter/free",
             messages: [
                 {
                     role: "system",

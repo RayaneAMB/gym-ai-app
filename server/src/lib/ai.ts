@@ -58,7 +58,7 @@ export async function generateTrainingPlan(
 
         console.log("RÉPONSE BRUTE DE L'IA :", content);
 
-        // ✅ LE CORRECTIF EST ICI : On extrait de force uniquement le JSON
+        // On extrait de force uniquement le JSON
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         
         if (!jsonMatch) {
@@ -66,8 +66,12 @@ export async function generateTrainingPlan(
             throw new Error("Le format renvoyé par l'IA n'est pas du JSON valide");
         }
 
-        // On prend le résultat extrait et on le parse
-        const cleaned = jsonMatch[0];
+        // ✅ LE CORRECTIF EST ICI : Regex Safety Net
+        let cleaned = jsonMatch[0];
+        
+        // This finds unquoted ranges like 3-4 or 6-7 and wraps them in quotes so JSON.parse doesn't crash
+        cleaned = cleaned.replace(/:\s*(\d+-\d+)/g, ': "$1"');
+
         const planData = JSON.parse(cleaned);
         
         return formatPlanResponse(planData, normalizedProfile);
@@ -181,6 +185,11 @@ Exigences :
 ${userProfile.injuries ? `- Éviter : ${userProfile.injuries}` : ""}
 - Ajouter des alternatives si possible
 
-Retourne uniquement le JSON, sans texte supplémentaire.`;
+🚨 RÈGLES STRICTES POUR LE FORMAT JSON 🚨 :
+- Ne mets JAMAIS de plages de nombres sans guillemets (interdit : "sets": 3-4, "rpe": 6-7).
+- Si tu utilises une plage, tu DOIS utiliser des guillemets (correct : "sets": "3-4").
+- Pour "sets" et "rpe", utilise de préférence un seul nombre entier (correct : "sets": 4).
+- Assure-toi que toutes les clés et valeurs textuelles sont entre doubles guillemets.
+- Retourne uniquement le JSON, sans texte supplémentaire, sans markdown.`;
     }
 }

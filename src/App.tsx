@@ -1,37 +1,67 @@
-import { BrowserRouter , Route, Routes } from "react-router-dom"
-import Home from "./pages/Home"
-import Onboarding from "./pages/Onboarding"
-import Auth from "./pages/Auth"
-import Account from "./pages/Account"
-import Profile from "./pages/Profile"
-import Navbar from "./componentes/layout/Navbar"
-import { NeonAuthUIProvider } from '@neondatabase/neon-js/auth/react';
-import { authClient } from "./lib/auth";
-import AuthProvider from "./context/AuthContext"
+import { lazy, Suspense } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-function App() {
- return (
-  <NeonAuthUIProvider authClient={authClient}>
-    <AuthProvider> 
+import AuthProvider from "./context/AuthContext";
+import Navbar from "./componentes/layout/Navbar";
+import ProtectedRoute from "./componentes/layout/ProtectedRoute";
+import { ErrorBoundary } from "./componentes/ui/ErrorBoundary";
+import { LoadingScreen } from "./componentes/ui/LoadingScreen";
+import Home from "./pages/Home";
+
+/*
+ * Only the landing page ships in the entry chunk. Onboarding pulls in the
+ * multi-step form, the dashboard pulls in Framer Motion, and the auth screens
+ * pull in Neon's account UI — none of which a first-time visitor needs before
+ * they click something.
+ */
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Auth = lazy(() => import("./pages/Auth"));
+const Account = lazy(() => import("./pages/Account"));
+
+export default function App() {
+  return (
+    <ErrorBoundary>
       <BrowserRouter>
-        <Navbar />
-        <div className="min-h-screen flex flex-col">
-    
-           <main className="flex-1">
-            <Routes>
-              <Route index element={<Home />} />
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/account/:pathname" element={<Account />} />
-              <Route path="/auth/:pathname" element={<Auth />} />
-            </Routes>
-           </main>
+        <AuthProvider>
+          <div className="min-h-screen flex flex-col bg-[var(--color-bg)]">
+            <Navbar />
+            <main className="flex-1">
+              <Suspense fallback={<LoadingScreen />}>
+                <Routes>
+                  <Route index element={<Home />} />
+                  <Route
+                    path="/onboarding"
+                    element={
+                      <ProtectedRoute>
+                        <Onboarding />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/profile"
+                    element={
+                      <ProtectedRoute>
+                        <Profile />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/account/:pathname?"
+                    element={
+                      <ProtectedRoute>
+                        <Account />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route path="/auth/:pathname" element={<Auth />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
+            </main>
           </div>
-    
+        </AuthProvider>
       </BrowserRouter>
-      </AuthProvider>
-  </NeonAuthUIProvider>)
-   
+    </ErrorBoundary>
+  );
 }
-
-export default App

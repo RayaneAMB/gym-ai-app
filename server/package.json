@@ -1,28 +1,29 @@
 {
-  "name": "server",
+  "name": "gym-ai-planner-server",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev:server": "tsx watch src/index.ts"
-  },
-  "keywords": [],
-  "author": "",
+  "description": "API Express pour GymAI : profils d'entraînement et génération de programmes par IA",
+  "main": "dist/index.js",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:migrate": "prisma migrate deploy",
+    "db:generate": "prisma generate"
+  },
   "dependencies": {
     "@prisma/adapter-pg": "^7.4.0",
     "@prisma/client": "^7.4.0",
-    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "openai": "^6.22.0",
-    "pg": "^8.18.0"
+    "pg": "^8.18.0",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^25.2.3",
@@ -30,6 +31,4 @@
     "prisma": "^7.4.0",
     "tsx": "^4.21.0"
   }
-  
-  
 }

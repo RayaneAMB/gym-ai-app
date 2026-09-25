@@ -1,367 +1,363 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Check } from "lucide-react";
-import type { UserProfile } from "../types";
-import { useAuth } from "../context/AuthContext";
 
-const GOALS = [
-  { value: "Bulk",      label: "Prise de masse",      icon: "💪" },
-  { value: "Cut",       label: "Sèche / Fat loss",    icon: "🔥" },
-  { value: "recomp",    label: "Recomposition",       icon: "⚖️" },
-  { value: "strength",  label: "Force maximale",      icon: "🏋️" },
-  { value: "endurance", label: "Cardio / Endurance",  icon: "🏃" },
-];
-
-const EXP = [
-  { value: "Debutant",      label: "Débutant",      sub: "0-1 an" },
-  { value: "Intermediate",  label: "Intermédiaire", sub: "1-3 ans" },
-  { value: "Advanced",      label: "Avancé",        sub: "3+ ans" },
-];
-
-const EQUIP = [
-  { value: "Full Gym",   label: "Salle complète", icon: "🏟️" },
-  { value: "Home Gym",   label: "Home gym",       icon: "🏠" },
-  { value: "Dumbbells",  label: "Haltères seuls", icon: "🔩" },
-];
-
-const SPLIT = [
-  { value: "Full Body",       label: "Full Body" },
-  { value: "Upper/Lower",     label: "Haut / Bas" },
-  { value: "Push/Pull/Legs",  label: "PPL" },
-  { value: "Custom",          label: "IA choisit ✦" },
-];
-
-const DAYS  = ["2","3","4","5","6"];
-const DURS  = [
-  { value: "30", label: "30 min" },
-  { value: "45", label: "45 min" },
-  { value: "60", label: "60 min" },
-  { value: "90", label: "90 min" },
-];
+import { useAuth } from "../hooks/useAuth";
+import type { TrainingProfile } from "../types";
+import {
+  DAYS_OPTIONS,
+  DEFAULT_PROFILE,
+  EQUIPMENT_OPTIONS,
+  EXPERIENCE_OPTIONS,
+  GOAL_OPTIONS,
+  SESSION_OPTIONS,
+  SPLIT_OPTIONS,
+  labelFor,
+  type Option,
+} from "../lib/labels";
+import { LoadingScreen } from "../componentes/ui/LoadingScreen";
 
 const STEPS = [
-  { tag: "Étape 1 / 4", title: "Quel est ton objectif ?",    sub: "On calibre tout le programme autour de ça." },
-  { tag: "Étape 2 / 4", title: "Ton niveau & ton planning",  sub: "Pour adapter la charge et la fréquence." },
-  { tag: "Étape 3 / 4", title: "Équipement & structure",     sub: "On choisit les exercices selon ce que tu as." },
-  { tag: "Étape 4 / 4", title: "Derniers détails",           sub: "Blessures, limitations — ou aucune, c'est cool aussi." },
+  { title: "Quel est ton objectif ?", sub: "On calibre tout le programme autour de ça." },
+  { title: "Ton niveau & ton planning", sub: "Pour adapter la charge et la fréquence." },
+  { title: "Équipement & structure", sub: "On choisit les exercices selon ce que tu as." },
+  { title: "Derniers détails", sub: "Blessures, limitations — ou aucune, c'est très bien aussi." },
 ];
 
-const RECAP_LABELS: Record<string, Record<string, string>> = {
-  goal:  { Bulk:"Prise de masse", Cut:"Sèche", recomp:"Recomposition", strength:"Force", endurance:"Endurance" },
-  exp:   { Debutant:"Débutant", Intermediate:"Intermédiaire", Advanced:"Avancé" },
-  equip: { "Full Gym":"Salle complète", "Home Gym":"Home gym", Dumbbells:"Haltères" },
-};
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function Chip({
-  label, icon, active, onClick,
-}: { label: string; icon?: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2.5 rounded-[10px] border text-[13px] font-semibold transition-all duration-150 cursor-pointer select-none
-        ${active
-          ? "bg-[#CCFF00] border-[#CCFF00] text-black"
-          : "bg-[#111113] border-[#1e1e22] text-[#71717a] hover:border-[#3f3f46] hover:text-[#a1a1aa]"
-        }`}
-    >
-      {icon && <span className="text-[14px] leading-none">{icon}</span>}
-      {label}
-    </button>
-  );
-}
+// ── Building blocks ──────────────────────────────────────────────────────────
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="block text-[11px] font-bold tracking-[.08em] text-[#52525b] uppercase mb-2">
+    <span className="block text-[11px] font-bold tracking-[.08em] text-[var(--color-ink-faint)] uppercase mb-2">
       {children}
     </span>
   );
 }
 
-function NativeSelect({
-  value, onChange, children,
-}: { value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+function ChipGroup<T extends string>({
+  legend,
+  options,
+  value,
+  onChange,
+}: {
+  legend: string;
+  options: Option<T>[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
   return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="w-full bg-[#111113] border border-[#1e1e22] text-[#a1a1aa] rounded-[10px] px-3.5 py-[11px] pr-9 text-[13px] font-medium appearance-none cursor-pointer outline-none focus:border-[#CCFF00] transition-colors"
-      >
-        {children}
-      </select>
-      <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-[5px] h-[5px] border-r-[1.5px] border-b-[1.5px] border-[#52525b] rotate-45" />
-    </div>
+    <fieldset>
+      <legend className="contents">
+        <FieldLabel>{legend}</FieldLabel>
+      </legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const active = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChange(option.value)}
+              className={`flex flex-col items-start px-4 py-2.5 rounded-[10px] border text-left transition-colors duration-150 cursor-pointer
+                ${
+                  active
+                    ? "bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-accent-ink)]"
+                    : "bg-[var(--color-surface)] border-[var(--color-line)] text-[var(--color-ink-subtle)] hover:border-[#3f3f46] hover:text-[var(--color-ink-muted)]"
+                }`}
+            >
+              <span className="flex items-center gap-2 text-[13px] font-bold">
+                {option.icon && <span aria-hidden="true">{option.icon}</span>}
+                {option.label}
+              </span>
+              {option.hint && (
+                <span
+                  className={`text-[11px] font-medium ${
+                    active ? "text-black/60" : "text-[#3f3f46]"
+                  }`}
+                >
+                  {option.hint}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
+function NativeSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Option<string>[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <FieldLabel>{label}</FieldLabel>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full bg-[var(--color-surface)] border border-[var(--color-line)] text-[var(--color-ink-muted)] rounded-[10px] px-3.5 py-[11px] pr-9 text-[13px] font-medium appearance-none cursor-pointer outline-none focus:border-[var(--color-accent)] transition-colors"
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-[5px] h-[5px] border-r-[1.5px] border-b-[1.5px] border-[var(--color-ink-faint)] rotate-45"
+        />
+      </div>
+    </label>
   );
 }
 
 function ProgressBar({ step }: { step: number }) {
   return (
-    <div className="flex items-center gap-2 mb-10">
-      {STEPS.map((_, i) => (
-        <div key={i} className="flex items-center gap-2 flex-1">
-          <div className={`w-7 h-7 rounded-full border-[1.5px] flex items-center justify-center text-[11px] font-bold flex-shrink-0 transition-all duration-300
-            ${i < step  ? "bg-[#CCFF00] border-[#CCFF00] text-black"
-            : i === step ? "border-[#CCFF00] text-[#CCFF00] bg-transparent"
-            :              "border-[#1e1e22] text-[#3f3f46] bg-[#111]"}`}
+    <ol className="flex items-center gap-2 mb-10" aria-label="Progression">
+      {STEPS.map((s, i) => (
+        <li key={s.title} className="flex items-center gap-2 flex-1">
+          <div
+            aria-current={i === step ? "step" : undefined}
+            className={`w-7 h-7 rounded-full border-[1.5px] flex items-center justify-center text-[11px] font-bold flex-shrink-0 transition-colors duration-300
+              ${
+                i < step
+                  ? "bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-accent-ink)]"
+                  : i === step
+                    ? "border-[var(--color-accent)] text-[var(--color-accent)] bg-transparent"
+                    : "border-[var(--color-line)] text-[#3f3f46] bg-[var(--color-surface)]"
+              }`}
           >
-            {i < step ? <Check className="w-3 h-3" strokeWidth={3} /> : i + 1}
+            {i < step ? <Check className="w-3 h-3" strokeWidth={3} aria-hidden="true" /> : i + 1}
+            <span className="sr-only">
+              Étape {i + 1} sur {STEPS.length}
+            </span>
           </div>
           {i < STEPS.length - 1 && (
-            <div className={`flex-1 h-px transition-all duration-300 ${i < step ? "bg-[#CCFF00]" : "bg-[#1e1e22]"}`} />
+            <div
+              className={`flex-1 h-px transition-colors duration-300 ${
+                i < step ? "bg-[var(--color-accent)]" : "bg-[var(--color-line)]"
+              }`}
+            />
           )}
-        </div>
+        </li>
       ))}
-    </div>
+    </ol>
   );
 }
 
-// ── Step content ──────────────────────────────────────────────────────────────
-
-function Step1({ form, update }: { form: any; update: (k: string, v: any) => void }) {
-  return (
-    <div className="space-y-4">
-      <div>
-        <FieldLabel>Objectif principal</FieldLabel>
-        <div className="flex flex-wrap gap-2">
-          {GOALS.map(g => (
-            <Chip key={g.value} label={g.label} icon={g.icon}
-              active={form.goal === g.value} onClick={() => update("goal", g.value)} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Step2({ form, update }: { form: any; update: (k: string, v: any) => void }) {
-  return (
-    <div className="space-y-5">
-      <div>
-        <FieldLabel>Niveau d'expérience</FieldLabel>
-        <div className="flex flex-wrap gap-2">
-          {EXP.map(e => (
-            <button
-              key={e.value} type="button"
-              onClick={() => update("experience", e.value)}
-              className={`flex flex-col px-4 py-2.5 rounded-[10px] border text-left transition-all duration-150 cursor-pointer
-                ${form.experience === e.value
-                  ? "bg-[#CCFF00] border-[#CCFF00] text-black"
-                  : "bg-[#111113] border-[#1e1e22] text-[#71717a] hover:border-[#3f3f46]"}`}
-            >
-              <span className="text-[13px] font-bold">{e.label}</span>
-              <span className={`text-[11px] font-medium ${form.experience === e.value ? "text-black/60" : "text-[#3f3f46]"}`}>{e.sub}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <FieldLabel>Jours / semaine</FieldLabel>
-          <NativeSelect value={form.days} onChange={v => update("days", v)}>
-            {DAYS.map(d => <option key={d} value={d}>{d} jours</option>)}
-          </NativeSelect>
-        </div>
-        <div>
-          <FieldLabel>Durée séance</FieldLabel>
-          <NativeSelect value={form.session} onChange={v => update("session", v)}>
-            {DURS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-          </NativeSelect>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Step3({ form, update }: { form: any; update: (k: string, v: any) => void }) {
-  return (
-    <div className="space-y-5">
-      <div>
-        <FieldLabel>Équipement</FieldLabel>
-        <div className="flex flex-wrap gap-2">
-          {EQUIP.map(e => (
-            <Chip key={e.value} label={e.label} icon={e.icon}
-              active={form.equipment === e.value} onClick={() => update("equipment", e.value)} />
-          ))}
-        </div>
-      </div>
-      <div>
-        <FieldLabel>Type de split</FieldLabel>
-        <div className="flex flex-wrap gap-2">
-          {SPLIT.map(s => (
-            <Chip key={s.value} label={s.label}
-              active={form.splitPreference === s.value} onClick={() => update("splitPreference", s.value)} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Step4({ form, update }: { form: any; update: (k: string, v: any) => void }) {
-  const recap = [
-    ["Objectif",   RECAP_LABELS.goal[form.goal]  || form.goal],
-    ["Niveau",     RECAP_LABELS.exp[form.experience] || form.experience],
-    ["Fréquence",  `${form.days} jours / semaine`],
-    ["Durée",      `${form.session} min / séance`],
-    ["Équipement", RECAP_LABELS.equip[form.equipment] || form.equipment],
-    ["Split",      form.splitPreference],
-  ];
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <FieldLabel>
-          Blessures ou limitations{" "}
-          <span className="text-[#3f3f46] normal-case font-normal tracking-normal">(optionnel)</span>
-        </FieldLabel>
-        <textarea
-          value={form.injuries}
-          onChange={e => update("injuries", e.target.value)}
-          rows={3}
-          placeholder="Ex : douleur genou droit, épaule fragile..."
-          className="w-full bg-[#111113] border border-[#1e1e22] text-[#a1a1aa] rounded-[10px] px-3.5 py-3 text-[13px] font-medium resize-none outline-none focus:border-[#CCFF00] transition-colors placeholder:text-[#3f3f46]"
-        />
-        <p className="text-[11px] text-[#3f3f46] mt-1.5">Ces infos restent privées et servent uniquement à adapter ton programme.</p>
-      </div>
-
-      {/* Récap */}
-      <div className="bg-[#111113] border border-[#1e1e22] rounded-[14px] overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#1e1e22]">
-          <span className="text-[11px] font-bold tracking-[.08em] text-[#52525b] uppercase">Récapitulatif</span>
-        </div>
-        {recap.map(([k, v], i) => (
-          <div key={i} className="flex justify-between items-center px-4 py-3 border-b border-[#1e1e22] last:border-b-0 text-[13px]">
-            <span className="text-[#52525b] font-medium">{k}</span>
-            <span className="text-[#CCFF00] font-bold">{v}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Onboarding() {
-  const { saveProfile, generatePlan } = useAuth();
+  const { profile, plan, isDataLoading, saveProfile, generatePlan, isGenerating } = useAuth();
   const navigate = useNavigate();
 
   const [step, setStep] = useState(0);
-  const [isGenerating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<TrainingProfile>(profile ?? DEFAULT_PROFILE);
 
-  const [form, setForm] = useState({
-    goal:             "Bulk",
-    experience:       "Intermediate",
-    days:             "4",
-    session:          "60",
-    equipment:        "Full Gym",
-    splitPreference:  "Full Body",
-    injuries:         "",
-  });
+  // Someone editing an existing profile should start from what they saved, not
+  // from the defaults. The profile arrives after the first render, so adopt it
+  // during render rather than in an effect (React's "adjusting state when a
+  // prop changes" pattern) — an effect here would render the defaults first.
+  const [syncedProfile, setSyncedProfile] = useState(profile);
+  if (profile && profile !== syncedProfile) {
+    setSyncedProfile(profile);
+    setForm(profile);
+  }
 
-  function update(key: string, value: any) {
-    setForm(prev => ({ ...prev, [key]: value }));
+  function update<K extends keyof TrainingProfile>(key: K, value: TrainingProfile[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
   }
 
   async function submit() {
     setError(null);
-    const profile: Omit<UserProfile, "userId" | "updatedAt"> = {
-      goal:             form.goal as UserProfile["goal"],
-      experience:       form.experience as UserProfile["experience"],
-      daysPerWeek:      parseInt(form.days),
-      sessionLength:    parseInt(form.session),
-      equipment:        form.equipment as UserProfile["equipment"],
-      splitPreference:  form.splitPreference as UserProfile["splitPreference"],
-      injuries:         form.injuries || null,
-    };
     try {
-      setGenerating(true);
-      await saveProfile(profile);
+      await saveProfile(form);
       await generatePlan();
-      navigate("/profile");
+      navigate("/profile", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Une erreur est survenue");
-      setGenerating(false);
     }
+  }
+
+  if (isDataLoading && !profile && !plan) {
+    return <LoadingScreen message="Chargement de votre profil…" />;
   }
 
   if (isGenerating) {
     return (
-      <div className="min-h-screen bg-[#09090B] flex items-center justify-center px-6">
-        <div className="flex flex-col items-center gap-5 text-center max-w-xs">
-          <div className="w-12 h-12 rounded-full border-2 border-[#1e1e22] border-t-[#CCFF00] animate-spin" />
-          <div>
-            <p className="text-lg font-black tracking-tight text-white mb-1">Génération en cours…</p>
-            <p className="text-[13px] text-[#52525b] leading-relaxed">
-              On construit ton programme sur-mesure avec l'IA. Quelques secondes…
-            </p>
-          </div>
-        </div>
-      </div>
+      <LoadingScreen message="On construit ton programme sur-mesure avec l'IA. Quelques secondes…" />
     );
   }
 
-  return (
-    <div className="min-h-screen bg-[#09090B] pt-24 pb-16 px-6">
-      <div className="max-w-lg mx-auto">
+  const isLastStep = step === STEPS.length - 1;
 
+  const recap: [string, string][] = [
+    ["Objectif", labelFor.goal(form.goal)],
+    ["Niveau", labelFor.experience(form.experience)],
+    ["Fréquence", `${form.daysPerWeek} jours / semaine`],
+    ["Durée", `${form.sessionLength} min / séance`],
+    ["Équipement", labelFor.equipment(form.equipment)],
+    ["Split", labelFor.split(form.split)],
+  ];
+
+  return (
+    <div className="min-h-screen pt-24 pb-16 px-6">
+      <div className="max-w-lg mx-auto">
         <ProgressBar step={step} />
 
-        {/* Header */}
-        <div className="mb-6">
-          <p className="text-[10px] font-black tracking-[.12em] text-[#CCFF00] uppercase opacity-80 mb-1.5">
-            {STEPS[step].tag}
+        <header className="mb-6">
+          <p className="text-[10px] font-black tracking-[.12em] text-[var(--color-accent)] uppercase opacity-80 mb-1.5">
+            Étape {step + 1} / {STEPS.length}
           </p>
-          <h1 className="text-[26px] font-black tracking-tight leading-tight text-white mb-1.5">
+          <h1 className="text-[26px] font-black tracking-tight leading-tight text-[var(--color-ink)] mb-1.5">
             {STEPS[step].title}
           </h1>
-          <p className="text-[13px] text-[#52525b] leading-relaxed">{STEPS[step].sub}</p>
-        </div>
+          <p className="text-[13px] text-[var(--color-ink-faint)] leading-relaxed">
+            {STEPS[step].sub}
+          </p>
+        </header>
 
-        {/* Error */}
         {error && (
-          <div className="mb-5 px-4 py-3 rounded-[10px] bg-red-500/10 border border-red-500/20 text-red-400 text-[13px]">
+          <div
+            role="alert"
+            className="mb-5 px-4 py-3 rounded-[10px] bg-red-500/10 border border-red-500/20 text-[var(--color-danger)] text-[13px]"
+          >
             {error}
           </div>
         )}
 
-        {/* Step content */}
-        <div className="mb-8">
-          {step === 0 && <Step1 form={form} update={update} />}
-          {step === 1 && <Step2 form={form} update={update} />}
-          {step === 2 && <Step3 form={form} update={update} />}
-          {step === 3 && <Step4 form={form} update={update} />}
+        <div className="mb-8 space-y-5">
+          {step === 0 && (
+            <ChipGroup
+              legend="Objectif principal"
+              options={GOAL_OPTIONS}
+              value={form.goal}
+              onChange={(v) => update("goal", v)}
+            />
+          )}
+
+          {step === 1 && (
+            <>
+              <ChipGroup
+                legend="Niveau d'expérience"
+                options={EXPERIENCE_OPTIONS}
+                value={form.experience}
+                onChange={(v) => update("experience", v)}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <NativeSelect
+                  label="Jours / semaine"
+                  value={String(form.daysPerWeek)}
+                  options={DAYS_OPTIONS}
+                  onChange={(v) => update("daysPerWeek", Number(v))}
+                />
+                <NativeSelect
+                  label="Durée séance"
+                  value={String(form.sessionLength)}
+                  options={SESSION_OPTIONS}
+                  onChange={(v) => update("sessionLength", Number(v))}
+                />
+              </div>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <ChipGroup
+                legend="Équipement"
+                options={EQUIPMENT_OPTIONS}
+                value={form.equipment}
+                onChange={(v) => update("equipment", v)}
+              />
+              <ChipGroup
+                legend="Type de split"
+                options={SPLIT_OPTIONS}
+                value={form.split}
+                onChange={(v) => update("split", v)}
+              />
+            </>
+          )}
+
+          {step === 3 && (
+            <>
+              <label className="block">
+                <FieldLabel>
+                  Blessures ou limitations{" "}
+                  <span className="text-[#3f3f46] normal-case font-normal tracking-normal">
+                    (optionnel)
+                  </span>
+                </FieldLabel>
+                <textarea
+                  value={form.injuries ?? ""}
+                  onChange={(e) => update("injuries", e.target.value || null)}
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Ex : douleur genou droit, épaule fragile…"
+                  className="w-full bg-[var(--color-surface)] border border-[var(--color-line)] text-[var(--color-ink-muted)] rounded-[10px] px-3.5 py-3 text-[13px] font-medium resize-none outline-none focus:border-[var(--color-accent)] transition-colors placeholder:text-[#3f3f46]"
+                />
+                <p className="text-[11px] text-[#3f3f46] mt-1.5">
+                  Ces infos restent privées et servent uniquement à adapter ton programme.
+                </p>
+              </label>
+
+              <div className="bg-[var(--color-surface)] border border-[var(--color-line)] rounded-[14px] overflow-hidden">
+                <div className="px-4 py-3 border-b border-[var(--color-line)]">
+                  <span className="text-[11px] font-bold tracking-[.08em] text-[var(--color-ink-faint)] uppercase">
+                    Récapitulatif
+                  </span>
+                </div>
+                <dl>
+                  {recap.map(([key, val]) => (
+                    <div
+                      key={key}
+                      className="flex justify-between items-center px-4 py-3 border-b border-[var(--color-line)] last:border-b-0 text-[13px]"
+                    >
+                      <dt className="text-[var(--color-ink-faint)] font-medium">{key}</dt>
+                      <dd className="text-[var(--color-accent)] font-bold">{val}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Navigation */}
         <div className="flex gap-3">
           {step > 0 && (
             <button
               type="button"
-              onClick={() => setStep(s => s - 1)}
-              className="px-5 py-3 rounded-[10px] border border-[#1e1e22] bg-transparent text-[#52525b] text-[13px] font-bold hover:border-[#3f3f46] hover:text-[#a1a1aa] transition-all"
+              onClick={() => setStep((s) => s - 1)}
+              className="px-5 py-3 rounded-[10px] border border-[var(--color-line)] text-[var(--color-ink-faint)] text-[13px] font-bold hover:border-[#3f3f46] hover:text-[var(--color-ink-muted)] transition-colors"
             >
               ← Retour
             </button>
           )}
           <button
             type="button"
-            onClick={() => step < STEPS.length - 1 ? setStep(s => s + 1) : submit()}
-            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-[10px] bg-[#CCFF00] text-black text-[14px] font-black uppercase tracking-wide hover:opacity-90 transition-opacity"
+            onClick={() => (isLastStep ? submit() : setStep((s) => s + 1))}
+            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-[10px] bg-[var(--color-accent)] text-[var(--color-accent-ink)] text-[14px] font-black uppercase tracking-wide hover:bg-[var(--color-accent-strong)] transition-colors"
           >
-            {step < STEPS.length - 1 ? (
-              <>Continuer <ArrowRight className="w-4 h-4" strokeWidth={2.5} /></>
+            {isLastStep ? (
+              "Générer mon programme"
             ) : (
-              <>Générer mon programme</>
+              <>
+                Continuer <ArrowRight className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+              </>
             )}
           </button>
         </div>
-
       </div>
     </div>
   );

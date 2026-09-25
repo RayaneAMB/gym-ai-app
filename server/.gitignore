@@ -19,7 +19,7 @@ out/
 
 # --- PRISMA ---
 # Si tu génères ton client Prisma dans un dossier spécifique
-/generated/prisma
+/src/generated/prisma
 /prisma/generated-client
 
 # --- LOGS ET CACHE ---

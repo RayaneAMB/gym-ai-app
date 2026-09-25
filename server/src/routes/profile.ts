@@ -1,58 +1,59 @@
 import { Router, type Request, type Response } from "express";
-import { prisma } from "../lib/prisma";
+import { prisma } from "../lib/prisma.js";
+import { log } from "../lib/logger.js";
+import { normalizeProfile, profileInputSchema } from "../domain/profile.js";
 
-export const profileRouter = Router(); 
+export const profileRouter = Router();
 
-profileRouter.post("/" , async(req:Request , res:Response) => {
-    try {
-        const {userId , ...profileData} = req.body;
-        if (!userId) {
-            return res.status(400).json({ error: "User ID is required" });
-        }
-        
-        // 👇 1. Utilise les noms exacts de ton UserProfile
-        const {
-            goal,
-            experience,
-            daysPerWeek,
-            sessionLength,
-            equipment,
-            injuries,
-            splitPreference,
-        } = profileData;
-        
-        // 👇 2. Mets à jour la validation
-        if (!goal || !experience || !daysPerWeek || !sessionLength || !equipment || !splitPreference) {
-            return res.status(400).json({ error: "Missing required profile fields" });
-        }
-        
-        await prisma.user_profile.upsert({
-            where: { user_id: userId },
-            update: {
-                goal,
-                experience,
-                days_per_week: daysPerWeek, // 👇 3. Associe avec les nouveaux noms
-                session_length: sessionLength,
-                equipment,
-                injuries: injuries || null,
-                split_preference: splitPreference,
-                Updated_at: new Date(),
-            },
-            create: {
-                user_id: userId,
-                goal,
-                experience,
-                days_per_week: daysPerWeek,
-                session_length: sessionLength,
-                equipment,
-                injuries: injuries || null,
-                split_preference: splitPreference,
-            },
-        });
+/** Returns the signed-in athlete's profile, or 204 if they haven't made one. */
+profileRouter.get("/", async (req: Request, res: Response) => {
+  try {
+    const row = await prisma.user_profile.findUnique({
+      where: { user_id: req.userId! },
+    });
 
-        res.json({ success: true, message: "Profile saved successfully!" });  
-    } catch (error) { 
-        console.error("Error creating profile:", error);
-        res.status(500).json({ error: "Failed to create profile" });
-    }
+    if (!row) return res.status(204).end();
+    return res.json(normalizeProfile(row));
+  } catch (error) {
+    log.error("Failed to load profile", error);
+    return res.status(500).json({ error: "Impossible de charger le profil" });
+  }
+});
+
+profileRouter.post("/", async (req: Request, res: Response) => {
+  const parsed = profileInputSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "Profil invalide",
+      details: parsed.error.issues.map((i) => ({
+        field: i.path.join("."),
+        message: i.message,
+      })),
+    });
+  }
+
+  const profile = parsed.data;
+
+  try {
+    const row = {
+      goal: profile.goal,
+      experience: profile.experience,
+      days_per_week: profile.daysPerWeek,
+      session_length: profile.sessionLength,
+      equipment: profile.equipment,
+      injuries: profile.injuries,
+      split_preference: profile.split,
+    };
+
+    await prisma.user_profile.upsert({
+      where: { user_id: req.userId! },
+      update: { ...row, Updated_at: new Date() },
+      create: { user_id: req.userId!, ...row },
+    });
+
+    return res.json({ success: true, profile });
+  } catch (error) {
+    log.error("Failed to save profile", error);
+    return res.status(500).json({ error: "Impossible d'enregistrer le profil" });
+  }
 });

@@ -1,10 +1,36 @@
 <!doctype html>
-<html lang="en">
+<!--
+  `class="dark"` is Neon Auth's own dark-mode switch: its stylesheet resolves
+  --neon-* tokens from :root (light) unless a .dark ancestor overrides them.
+  Without it, Neon sets `body { color: <near-black> }` and every sign-in and
+  account screen renders dark-on-dark.
+-->
+<html lang="fr" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>react-gym-ai-planner</title>
+    <meta name="theme-color" content="#09090B" />
+    <meta
+      name="description"
+      content="GymAI génère un programme d'entraînement personnalisé à partir de vos objectifs, votre niveau, votre équipement et votre planning."
+    />
+
+    <title>GymAI — Votre programme d'entraînement par IA</title>
+
+    <meta property="og:title" content="GymAI — Votre programme d'entraînement par IA" />
+    <meta
+      property="og:description"
+      content="Un programme sur-mesure, calibré sur vos objectifs et votre équipement, généré en quelques secondes."
+    />
+    <meta property="og:type" content="website" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Oswald:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div id="root"></div>

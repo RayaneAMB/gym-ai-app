@@ -1,24 +1,79 @@
 @import "tailwindcss";
 @import "@neondatabase/neon-js/ui/tailwind";
 
-
+/*
+ * Design tokens — "Volt Performance".
+ *
+ * Everything visual routes through these. Pages used to hardcode #CCFF00 while
+ * the theme declared a different green (#a3e635), so the landing page and the
+ * dashboard did not look like the same product.
+ */
 @theme {
-  --font-sans: "Geist", system-ui, sans-serif;
+  --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+  --font-display: "Oswald", "DM Sans", system-ui, sans-serif;
 
-  --color-background: #0a0a0a;
-  --color-foreground: #fafafa;
-  --color-muted: #a1a1aa;
-  --color-border: #27272a;
-  --color-card: #18181b;
-  --color-accent: #a3e635;
-  --color-accent-hover: #84cc16;
+  --color-bg: #09090b;
+  --color-surface: #111113;
+  --color-surface-raised: #18181b;
+  --color-line: #1e1e22;
+
+  --color-ink: #fafafa;
+  --color-ink-muted: #a1a1aa;
+  --color-ink-subtle: #71717a;
+  --color-ink-faint: #52525b;
+
+  --color-accent: #ccff00;
+  --color-accent-strong: #b8e600;
+  --color-accent-ink: #09090b;
+
+  --color-danger: #f87171;
+  --color-warn: #fbbf24;
+  --color-ok: #34d399;
+
+  /* Kept as aliases so older markup keeps rendering correctly. */
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-ink);
+  --color-muted: var(--color-ink-subtle);
+  --color-border: var(--color-line);
+  --color-card: var(--color-surface-raised);
+  --color-accent-hover: var(--color-accent-strong);
+}
+
+/*
+ * Neon Auth's UI resolves its own --neon-* tokens from these shadcn-style
+ * names, falling back to a stock grey palette when they are unset. Defining
+ * them puts the sign-in, sign-up and account screens on the Volt palette
+ * through the library's intended theming hook, instead of the page-level
+ * `!important` overrides this app used to carry.
+ */
+:root,
+.dark {
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #18181b;
+  --card-foreground: #fafafa;
+  --popover: #18181b;
+  --popover-foreground: #fafafa;
+  --primary: #ccff00;
+  --primary-foreground: #09090b;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #18181b;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+  --destructive: #f87171;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #ccff00;
 }
 
 @layer base {
   html {
     font-family: var(--font-sans);
-    background-color: var(--color-background);
-    color: var(--color-foreground);
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
@@ -26,11 +81,69 @@
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Neon's stylesheet also sets `body { color }`. State ours explicitly so
+       the app's text never depends on which stylesheet loads last. */
+    background-color: var(--color-bg);
+    color: var(--color-ink);
   }
 
-  /* Override Better Auth skeleton colors */
+  h1, h2, h3 {
+    font-family: var(--font-display);
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-accent-ink);
+  }
+
+  /* A visible focus ring is the only way this app is keyboard-navigable. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line) transparent;
+  }
+
+  /* Override Neon Auth's skeleton colours to match the dark theme. */
   [data-slot="skeleton"],
   .animate-pulse {
-    background-color: var(--color-border) !important;
+    background-color: var(--color-line) !important;
+  }
+}
+
+@layer utilities {
+  /* Film-grain overlay. Was pasted inline as a data URI in the dashboard. */
+  .bg-noise::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.03;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .text-stroke-accent {
+    color: transparent;
+    -webkit-text-stroke: 2px var(--color-accent);
+  }
+}
+
+/*
+ * This app leans hard on motion. Honour the OS setting instead of making
+ * people who get motion sick sit through it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

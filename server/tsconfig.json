@@ -1,19 +1,24 @@
 {
+  // This project is ESM ("type": "module") and must stay that way: Prisma 7's
+  // `prisma-client` generator emits `import.meta.url`, which throws at runtime
+  // under CommonJS. That is why relative imports carry explicit .js extensions.
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
+    "module": "NodeNext",
     "lib": ["ES2022"],
-    "moduleResolution": "bundler",
-    "rootDir": "./",
+    "moduleResolution": "NodeNext",
+    "rootDir": "./src",
     "outDir": "./dist",
-    "strict": false,
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
+    "sourceMap": true,
     "types": ["node"]
   },
-  "include": ["./**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

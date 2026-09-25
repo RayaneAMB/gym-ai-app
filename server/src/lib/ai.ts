@@ -1,195 +1,208 @@
 import OpenAI from "openai";
-import dotenv from "dotenv";
-import { TrainingPlan, UserProfile } from "../../types";
+import { env } from "../config.js";
+import { log } from "./logger.js";
+import { parseJsonObject } from "./json.js";
+import { planSchema, type TrainingPlanContent } from "../domain/plan.js";
+import type { TrainingProfile } from "../domain/profile.js";
 
-dotenv.config();
+const openai = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: env.OPENAI_API_KEY,
+  defaultHeaders: {
+    "HTTP-Referer": env.PUBLIC_URL,
+    "X-Title": "Gym AI Planner",
+  },
+});
 
+const SYSTEM_PROMPT = [
+  "Tu es un préparateur physique expert qui conçoit des programmes d'entraînement.",
+  "Tu réponds EXCLUSIVEMENT avec un objet JSON valide, sans texte d'introduction,",
+  "sans commentaire et sans balise markdown. Ta réponse commence par { et finit par }.",
+].join(" ");
+
+export class PlanGenerationError extends Error {
+  constructor(message: string, readonly cause?: unknown) {
+    super(message);
+    this.name = "PlanGenerationError";
+  }
+}
+
+/**
+ * Asks a model for a training plan and returns it validated.
+ *
+ * Two layers of resilience, both of which this app needs in practice: each
+ * model gets a second attempt with the validation error fed back to it, and
+ * if a model is retired or rate-limited we fall through to the next one.
+ */
 export async function generateTrainingPlan(
-    profile: UserProfile | Record<string, any>,
-): Promise<Omit<TrainingPlan, 'id' | 'user_id' | 'version' | 'created_at'>> {
+  profile: TrainingProfile,
+): Promise<TrainingPlanContent> {
+  const prompt = buildPrompt(profile);
+  const failures: string[] = [];
 
-    const normalizedProfile: UserProfile = {
-        goal: profile.goal || "bulk",
-        experience_level: profile.experience_level || profile.experience_level || "intermediate",
-        days_per_week: profile.days_per_week || 4,
-        session_length: profile.session_length || 60,
-        equipment: profile.equipment || "full_gym",
-        injuries: profile.injuries || null,
-        prefered_split: profile.prefered_split || profile.prefered_split || "upper_lower",
-    };
+  for (const model of env.OPENROUTER_MODELS) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const raw = await requestCompletion(model, prompt, failures.at(-1));
+        const parsed = parseJsonObject(raw);
+        const plan = planSchema.parse(parsed);
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-        throw new Error("OpenAI API key is not set in environment variables");
-    }
-
-    // Connexion à OpenRouter
-    const openai = new OpenAI({
-        baseURL: "https://openrouter.ai/api/v1",
-        apiKey: apiKey,
-        defaultHeaders: {
-            "HTTP-Referer": "http://127.0.0.1:3001",
-            "X-Title": "Gym AI Planner",
-        }
-    });
-
-    const prompt = buildPrompt(normalizedProfile);
-
-    try {
-        const completion = await openai.chat.completions.create({
-            model: "openrouter/free",
-            messages: [
-                {
-                    role: "system",
-                    content: "Tu es un coach sportif expert et un concepteur de programmes d'entraînement. Tu dois répondre UNIQUEMENT avec un objet JSON valide. Ne dis pas 'bonjour', ne dis pas 'voici le plan', ne mets pas de balises markdown, renvoie JUSTE le JSON commençant par { et finissant par }."
-                },
-                {
-                    role: "user",
-                    content: prompt
-                },
-            ],
-            temperature: 0.7,
-        });
-
-        const content = completion.choices[0].message.content;
-        if (!content) {
-            throw new Error("AI malfunction: no content returned");
+        const expected = profile.daysPerWeek;
+        if (plan.weeklySchedule.length !== expected) {
+          log.warn("Model returned an unexpected number of sessions", {
+            model,
+            expected,
+            got: plan.weeklySchedule.length,
+          });
         }
 
-        console.log("RÉPONSE BRUTE DE L'IA :", content);
-
-        // On extrait de force uniquement le JSON
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        
-        if (!jsonMatch) {
-            console.error("Format invalide, pas de JSON trouvé:", content);
-            throw new Error("Le format renvoyé par l'IA n'est pas du JSON valide");
-        }
-
-        // ✅ LE CORRECTIF EST ICI : Regex Safety Net
-        let cleaned = jsonMatch[0];
-        
-        // This finds unquoted ranges like 3-4 or 6-7 and wraps them in quotes so JSON.parse doesn't crash
-        cleaned = cleaned.replace(/:\s*(\d+-\d+)/g, ': "$1"');
-
-        const planData = JSON.parse(cleaned);
-        
-        return formatPlanResponse(planData, normalizedProfile);
-
-    } catch (error) {
-        console.error("AI erreur:", error);
-        throw error;
-    }
-
-    function formatPlanResponse(
-        aiResponse: any,
-        profile: UserProfile
-    ): Omit<TrainingPlan, 'id' | 'user_id' | 'version' | 'created_at'> {
-        const plan: Omit<TrainingPlan, 'id' | 'user_id' | 'version' | 'created_at'> = {
-            overview: {
-                goal: aiResponse.overview?.goal || `Customized ${profile.goal} program`,
-                frequency: aiResponse.overview?.frequency || `${profile.days_per_week} jours par semaine`,
-                split: aiResponse.overview?.split || profile.prefered_split,
-                notes: aiResponse.overview?.notes || "Suivez bien votre programme et bonne chance !",
-            },
-            weeklySchedule: (aiResponse.weeklySchedule || []).map((day: any) => ({
-                day: day.day || "Day",
-                focus: day.focus || "Full Body",
-                exercices: (day.exercises || day.exercices || []).map((ex: any) => ({
-                    name: ex.name || "Exercice",
-                    sets: ex.sets || 3,
-                    reps: ex.reps || "8-12",
-                    rest: ex.rest || "60-90 sec",
-                    rpe: ex.rpe || 7,
-                    notes: ex.notes,
-                    alternative: ex.alternatives || ex.alternative,
-                })),
-            })),
-            progression: aiResponse.progression || "Augmente le poids de 1 à 2,5 kg lorsque tu peux compléter toutes les séries avec une bonne technique.",
-        };
+        log.info("Plan generated", { model, attempt, days: plan.weeklySchedule.length });
         return plan;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failures.push(message);
+        log.warn("Plan generation attempt failed", { model, attempt, message });
+
+        // A transport/auth failure won't be fixed by rephrasing — move on.
+        if (isModelUnavailable(error)) break;
+      }
     }
+  }
 
-    function buildPrompt(userProfile: UserProfile): string {
-        const goalMap: Record<string, string> = {
-            bulk: "prise de masse",
-            cut: "perte de poids",
-            maintain: "maintien de la forme",
-            strength: "maximiser la force",
-            endurance: "améliorer l'endurance",
-        };
+  throw new PlanGenerationError(
+    "Impossible de générer un programme pour le moment. Réessayez dans quelques instants.",
+    failures,
+  );
+}
 
-        const experienceMap: Record<string, string> = {
-            Debutant: "débutant (0-1 an)",
-            beginner: "débutant (0-1 an)",
-            Intermediate: "intermédiaire (1-3 ans)",
-            intermediate: "intermédiaire (1-3 ans)",
-            Advanced: "avancé (3+ ans)",
-            advanced: "avancé (3+ ans)",
-        };
+async function requestCompletion(
+  model: string,
+  prompt: string,
+  previousError?: string,
+): Promise<string> {
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: prompt },
+  ];
 
-        const equipmentMap: Record<string, string> = {
-            full_gym: "salle de sport complète",
-            home_gym: "équipement à domicile",
-            dumbbells: "haltères",
-        };
+  if (previousError) {
+    messages.push({
+      role: "user",
+      content:
+        `Ta réponse précédente a été rejetée : ${previousError}. ` +
+        "Renvoie uniquement un objet JSON valide respectant exactement la structure demandée.",
+    });
+  }
 
-        const splitMap: Record<string, string> = {
-            full_body: "Full Body",
-            upper_lower: "Haut/Bas",
-            push_pull_legs: "Push/Pull/Jambes",
-            custom: "Meilleur split personnalisé selon mon profil",
-        };
+  const completion = await openai.chat.completions.create({
+    model,
+    messages,
+    temperature: 0.7,
+    max_tokens: 4000,
+    // Honoured by most OpenRouter models; ignored gracefully by the rest.
+    response_format: { type: "json_object" },
+  });
 
-        return `Génère un plan d'entraînement ${userProfile.days_per_week} jours par semaine, avec des sessions de ${userProfile.session_length} minutes, pour un objectif de ${goalMap[userProfile.goal] || userProfile.goal}.
-Le plan doit être adapté à un niveau ${experienceMap[userProfile.experience_level] || userProfile.experience_level} et doit utiliser l'équipement suivant : ${equipmentMap[userProfile.equipment] || userProfile.equipment}.
-Le split doit être : ${splitMap[userProfile.prefered_split] || userProfile.prefered_split}.
-${userProfile.injuries ? `Je souffre des blessures suivantes : ${userProfile.injuries}. Prends-les en compte dans la planification.\n` : ""}
+  const content = completion.choices[0]?.message?.content;
+  if (!content?.trim()) throw new Error("Le modèle n'a renvoyé aucun contenu");
+  return content;
+}
 
-Génère le plan en JSON avec exactement cette structure :
+function isModelUnavailable(error: unknown): boolean {
+  if (!(error instanceof OpenAI.APIError)) return false;
+  // 400 shows up when a model doesn't exist or rejects response_format.
+  return [400, 401, 402, 404, 429, 502, 503].includes(error.status ?? 0);
+}
+
+const GOAL_LABELS: Record<TrainingProfile["goal"], string> = {
+  bulk: "prise de masse musculaire",
+  cut: "perte de gras en préservant le muscle",
+  recomp: "recomposition corporelle",
+  strength: "développement de la force maximale",
+  endurance: "endurance et condition physique",
+  maintain: "maintien de la forme actuelle",
+};
+
+const EXPERIENCE_LABELS: Record<TrainingProfile["experience"], string> = {
+  beginner: "débutant (0-1 an de pratique)",
+  intermediate: "intermédiaire (1-3 ans de pratique)",
+  advanced: "avancé (3 ans et plus)",
+};
+
+const EQUIPMENT_LABELS: Record<TrainingProfile["equipment"], string> = {
+  full_gym: "salle de sport complète (machines, barres, haltères, poulies)",
+  home_gym: "home gym (barre, quelques disques, haltères réglables)",
+  dumbbells: "haltères uniquement",
+  bodyweight: "poids du corps uniquement",
+};
+
+const SPLIT_LABELS: Record<TrainingProfile["split"], string> = {
+  full_body: "Full Body",
+  upper_lower: "Haut / Bas",
+  push_pull_legs: "Push / Pull / Jambes",
+  custom: "le split que tu juges le plus adapté à ce profil",
+};
+
+/** Session length drives how much volume actually fits in a workout. */
+function exercisesPerSession(sessionLength: number): string {
+  if (sessionLength <= 30) return "3 à 4";
+  if (sessionLength <= 45) return "4 à 5";
+  if (sessionLength <= 60) return "5 à 6";
+  return "6 à 8";
+}
+
+function buildPrompt(profile: TrainingProfile): string {
+  return `Conçois un programme d'entraînement hebdomadaire pour cet athlète :
+
+- Objectif : ${GOAL_LABELS[profile.goal]}
+- Niveau : ${EXPERIENCE_LABELS[profile.experience]}
+- Fréquence : ${profile.daysPerWeek} séances par semaine
+- Durée par séance : ${profile.sessionLength} minutes
+- Équipement disponible : ${EQUIPMENT_LABELS[profile.equipment]}
+- Split souhaité : ${SPLIT_LABELS[profile.split]}
+${profile.injuries ? `- Blessures / limitations à respecter impérativement : ${profile.injuries}` : "- Aucune blessure signalée"}
+
+Contraintes :
+- Exactement ${profile.daysPerWeek} séances dans "weeklySchedule".
+- ${exercisesPerSession(profile.sessionLength)} exercices par séance, compatibles avec ${profile.sessionLength} minutes.
+- RPE cible entre 6 et 9, cohérent avec le niveau ${EXPERIENCE_LABELS[profile.experience]}.
+- Uniquement des exercices réalisables avec : ${EQUIPMENT_LABELS[profile.equipment]}.
+${profile.injuries ? `- Exclus tout mouvement aggravant : ${profile.injuries}, et propose des alternatives sûres.` : ""}
+- Propose 1 à 2 alternatives par exercice.
+- Rédige tout le contenu en français.
+
+Réponds avec exactement cette structure JSON :
 
 {
   "overview": {
-    "goal": "brève description de l'objectif",
-    "frequency": "X jours par semaine",
-    "split": "nom du split",
-    "notes": "notes importantes (2-3 phrases)"
+    "goal": "description courte de l'objectif",
+    "frequency": "${profile.daysPerWeek} séances par semaine",
+    "split": "nom du split utilisé",
+    "notes": "2 à 3 phrases de conseils clés"
   },
   "weeklySchedule": [
     {
-      "day": "Lundi",
-      "focus": "groupe musculaire ciblé",
+      "day": "Séance 1 — Lundi",
+      "focus": "groupes musculaires ciblés",
       "exercises": [
         {
           "name": "Nom de l'exercice",
-          "sets": 4,
+          "sets": "4",
           "reps": "6-8",
           "rest": "2-3 min",
           "rpe": 8,
-          "notes": "conseils techniques (optionnel)",
+          "notes": "consigne technique courte",
           "alternatives": ["Alternative 1", "Alternative 2"]
         }
       ]
     }
   ],
-  "progression": "stratégie de progression (2-3 phrases)"
+  "progression": "2 à 3 phrases sur la progression semaine après semaine"
 }
 
-Exigences :
-- ${userProfile.days_per_week} jours d'entraînement
-- Séances de ${userProfile.session_length} minutes
-- 4 à 6 exercices par séance
-- RPE entre 6 et 9
-- Respecter le split : ${splitMap[userProfile.prefered_split] || userProfile.prefered_split}
-- Adapter au niveau : ${experienceMap[userProfile.experience_level] || userProfile.experience_level}
-${userProfile.injuries ? `- Éviter : ${userProfile.injuries}` : ""}
-- Ajouter des alternatives si possible
-
-🚨 RÈGLES STRICTES POUR LE FORMAT JSON 🚨 :
-- Ne mets JAMAIS de plages de nombres sans guillemets (interdit : "sets": 3-4, "rpe": 6-7).
-- Si tu utilises une plage, tu DOIS utiliser des guillemets (correct : "sets": "3-4").
-- Pour "sets" et "rpe", utilise de préférence un seul nombre entier (correct : "sets": 4).
-- Assure-toi que toutes les clés et valeurs textuelles sont entre doubles guillemets.
-- Retourne uniquement le JSON, sans texte supplémentaire, sans markdown.`;
-    }
+Règles de format strictes :
+- "sets", "reps" et "rest" sont TOUJOURS des chaînes de caractères entre guillemets.
+- "rpe" est TOUJOURS un nombre entier unique (jamais une plage).
+- Aucune valeur numérique ne doit contenir un tiret sans guillemets (interdit : "sets": 3-4).
+- Retourne uniquement le JSON, sans markdown ni texte autour.`;
 }

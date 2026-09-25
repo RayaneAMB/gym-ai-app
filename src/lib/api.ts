@@ -1,62 +1,84 @@
-//import type { TrainingPlan, UserProfile } from "../types";
+import type { PlanRevision, TrainingPlan, TrainingProfile } from "../types";
+import { authClient } from "./auth";
 
-const BASE_URL = "https://gym-ai-app-9hzs.onrender.com" 
-//const BASE_URL = "http://localhost:3001"
+/**
+ * Left empty in development so requests go through the Vite proxy (see
+ * vite.config.ts) and stay same-origin. Set VITE_API_URL for deployed builds.
+ */
+const BASE_URL = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
 
-// Interface pour la réponse de la DB (doit correspondre à ton Schema Prisma)
-interface PlanResponse {
-    id: string;
-    user_id: string;
-    plan_json: {
-        overview: any;
-        weeklySchedule: any;
-        progression: any;
-    };
-    version: number;
-    created_at: string;
+/** An API response that carried a structured error body. */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+
+  /** True when the profile must be filled in before this call can succeed. */
+  get needsProfile() {
+    return this.code === "PROFILE_REQUIRED";
+  }
 }
 
-// Helper générique pour POST
-async function post<T>(path: string, data: object): Promise<T> {
-    const res = await fetch(`${BASE_URL}${path}`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-    });
-    
-    if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "API request failed");
-    }
-    return res.json();
+async function authHeader(): Promise<Record<string, string>> {
+  const session = await authClient.getSession();
+  const token = session?.data?.session?.token;
+  if (!token) throw new ApiError("Session expirée, reconnectez-vous", 401);
+  return { authorization: `Bearer ${token}` };
 }
 
-// Helper générique pour GET
-async function get<T>(path: string): Promise<T | null> {
-    const res = await fetch(`${BASE_URL}/api${path}`);
-    
-    // 👇 GESTION DU 404: Si on ne trouve rien, on renvoie null en silence
-    if (res.status === 404) {
-        return null;
-    }
-    
-    if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Request failed");
-    }
-    return res.json();
+interface RequestOptions {
+  method?: "GET" | "POST";
+  body?: unknown;
+}
+
+/**
+ * Returns `null` for 204, which the API uses to say "nothing saved yet" —
+ * an empty profile or plan is a normal state, not an error.
+ */
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T | null> {
+  const { method = "GET", body } = options;
+
+  const response = await fetch(`${BASE_URL}/api${path}`, {
+    method,
+    headers: {
+      ...(await authHeader()),
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  if (response.status === 204) return null;
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new ApiError(
+      payload?.error ?? `La requête a échoué (${response.status})`,
+      response.status,
+      payload?.code,
+    );
+  }
+
+  return (await response.json()) as T;
 }
 
 export const api = {
-    saveProfile: (userId: string, profileData: any) =>
-        post<{ success: boolean; message: string }>("/api/profile", { userId, ...profileData }),
+  getProfile: () => request<TrainingProfile>("/profile"),
 
-    generatePlan: (userId: string) =>
-        post<{ id: string; version: number }>("/api/plan/generate", { userId }),
-    
-    getCurrentPlan: (userId: string): Promise<PlanResponse | null> => {
-        return get<PlanResponse>(`/plan/current?userId=${userId}`);
-    }
+  saveProfile: (profile: TrainingProfile) =>
+    request<{ success: true; profile: TrainingProfile }>("/profile", {
+      method: "POST",
+      body: profile,
+    }),
+
+  getCurrentPlan: () => request<TrainingPlan>("/plan/current"),
+
+  generatePlan: () => request<TrainingPlan>("/plan/generate", { method: "POST" }),
+
+  getPlanHistory: () => request<PlanRevision[]>("/plan/history"),
 };

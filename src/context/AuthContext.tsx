@@ -1,115 +1,133 @@
-import { createContext, type ReactNode, useCallback, useRef, useState, useEffect, useContext } from "react";
-import type { TrainingPlan, User, UserProfile } from "../types";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { authClient } from "../lib/auth";
-import { api } from "../lib/api";
-
-interface AuthContextType {
-    user: User | null;
-    plan: TrainingPlan | null; 
-    isloading: boolean;
-    
-    saveProfile: (profileData: Omit<UserProfile, "userId" | "updatedAt">) => Promise<void>;
-    generatePlan: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | null>(null);
+import { ApiError, api } from "../lib/api";
+import type { TrainingPlan, TrainingProfile, User } from "../types";
+import { AuthContext, type AuthContextValue } from "./auth-context";
 
 export default function AuthProvider({ children }: { children: ReactNode }) {
-    const [neonUser, setNeonUser] = useState<User | null>(null); // Type this as User, not any
-    const [plan, setPlan] = useState<TrainingPlan | null>(null);
-    const [isloading, setIsLoading] = useState(true);
-    const isRefereshingRef = useRef(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<TrainingProfile | null>(null);
+  const [plan, setPlan] = useState<TrainingPlan | null>(null);
 
-    // Load User Session
-    useEffect(() => {
-        async function loadUser() {
-            try {
-                const result = await authClient.getSession();
-                if (result && result.data?.user) {
-                    setNeonUser(result.data.user as User);
-                } else {
-                    setNeonUser(null);
-                }
-            } catch (error) {
-                setNeonUser(null);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-        loadUser();
-    }, []);
-    useEffect(()=>{
-        if (!isloading){
-            if(neonUser?.id){
-                refreshData()
-            } else{
-                setPlan(null);
-            }
-            setIsLoading(false);
-        }
-    },[neonUser?.id, isloading])
-    // Refresh Plan Data
-   const refreshData = useCallback(async () => {
-        // 1. On stocke l'ID dans une constante locale. TypeScript adore ça !
-        const currentUserId = neonUser?.id;
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [hasLoadedData, setHasLoadedData] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-        // 2. On vérifie la constante
-        if (!currentUserId || isRefereshingRef.current) return;
-        
-        isRefereshingRef.current = true;
+  // 1. Resolve the session once on mount.
+  useEffect(() => {
+    let cancelled = false;
 
-        try {
-            // 3. On utilise la constante locale au lieu de neonUser.id
-            const planData = await api.getCurrentPlan(currentUserId);
-            
-            if (planData) {
-                setPlan({
-                    id: planData.id,
-                    user_id: planData.user_id,
-                    overview: planData.plan_json.overview,
-                    weeklySchedule: planData.plan_json.weeklySchedule,
-                    progression: planData.plan_json.progression,
-                    version: planData.version,
-                    created_at: new Date(planData.created_at)
-                });
-            } else {
-                setPlan(null);
-            }
-        } catch (error) {
-            console.error("Error refreshing data:", error);
-        } finally {
-            isRefereshingRef.current = false;
-        }
-    }, [neonUser?.id]); // Use optional chaining here
+    authClient
+      .getSession()
+      .then((result) => {
+        if (!cancelled) setUser((result?.data?.user as User) ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setUser(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsAuthLoading(false);
+      });
 
-    // Auto-refresh plan when user loads
-    useEffect(() => {
-        if (neonUser) {
-            refreshData();
-        }
-    }, [neonUser, refreshData]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-    async function saveProfile(profileData: Omit<UserProfile, "userId" | "updatedAt">) {
-        if (!neonUser) throw new Error("User not authenticated");
-        await api.saveProfile(neonUser.id, profileData);
-        await refreshData();
+  const loadData = useCallback(async (signal?: { cancelled: boolean }) => {
+    try {
+      // Both are independent reads — no reason to wait for one before the other.
+      const [profileData, planData] = await Promise.all([
+        api.getProfile(),
+        api.getCurrentPlan(),
+      ]);
+      if (signal?.cancelled) return;
+      setProfile(profileData);
+      setPlan(planData);
+      setError(null);
+    } catch (err) {
+      if (signal?.cancelled) return;
+      setError(err instanceof Error ? err.message : "Impossible de charger vos données");
+    } finally {
+      if (!signal?.cancelled) setHasLoadedData(true);
     }
+  }, []);
 
-    async function generatePlan() {
-        if (!neonUser) throw new Error("Authentication required");
-        await api.generatePlan(neonUser.id);
-        await refreshData();
+  // 2. Once the user is known, load their profile and plan.
+  useEffect(() => {
+    if (isAuthLoading || !user) return;
+
+    const signal = { cancelled: false };
+    // `loadData` awaits the network before touching state, so nothing is set
+    // synchronously here — the rule just can't see through the async call.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData(signal);
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [user, isAuthLoading, loadData]);
+
+  const saveProfile = useCallback(async (next: TrainingProfile) => {
+    setError(null);
+    const result = await api.saveProfile(next);
+    // Trust the server's canonical echo rather than the values we sent.
+    setProfile(result?.profile ?? next);
+  }, []);
+
+  const signOut = useCallback(async () => {
+    try {
+      await authClient.signOut();
+    } finally {
+      // Clear locally even if the network call fails — the user asked to leave.
+      setUser(null);
+      setProfile(null);
+      setPlan(null);
+      setHasLoadedData(false);
+      setError(null);
     }
+  }, []);
 
-    return (
-        <AuthContext.Provider value={{ user: neonUser, plan, isloading, saveProfile, generatePlan }}>
-            {children}
-        </AuthContext.Provider>
-    );
-}
+  const generatePlan = useCallback(async () => {
+    setError(null);
+    setIsGenerating(true);
+    try {
+      // The generate endpoint returns the finished plan, so there is no
+      // follow-up fetch and no window where the UI shows a stale version.
+      const generated = await api.generatePlan();
+      if (generated) setPlan(generated);
+    } catch (err) {
+      const message =
+        err instanceof ApiError && err.needsProfile
+          ? "Complétez votre profil avant de générer un programme."
+          : err instanceof Error
+            ? err.message
+            : "La génération a échoué";
+      setError(message);
+      throw err;
+    } finally {
+      setIsGenerating(false);
+    }
+  }, []);
 
-export function useAuth() {
-    const context = useContext(AuthContext);
-    if (!context) throw new Error("useAuth must be used within an AuthProvider");
-    return context;
+  const value: AuthContextValue = {
+    user,
+    // Derived rather than cleared in an effect: signing out must not leave the
+    // previous athlete's data on screen for even one render.
+    profile: user ? profile : null,
+    plan: user ? plan : null,
+    isAuthLoading,
+    // "Signed in, but the first fetch hasn't landed yet." Derived so that a
+    // background refresh never blanks a page that already has content.
+    isDataLoading: Boolean(user) && !hasLoadedData,
+    isGenerating,
+    error,
+    clearError: useCallback(() => setError(null), []),
+    saveProfile,
+    signOut,
+    generatePlan,
+    refresh: useCallback(() => loadData(), [loadData]),
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
